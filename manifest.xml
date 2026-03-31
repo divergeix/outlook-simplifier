@@ -14,12 +14,12 @@
   <DisplayName DefaultValue="Thread Simplifier"/>
   <Description DefaultValue="AI-powered Outlook thread analysis. Summary, decisions, actions, deadlines. Powered by Claude AI."/>
 
-  <!-- IMPORTANT: Replace YOUR_GITHUB_PAGES_URL below with your actual URL
+  <!-- IMPORTANT: Replace https://divergeix.github.io/outlook-simplifier/ below with your actual URL
        Example: https://yourusername.github.io/outlook-simplifier
        Instructions on how to get this URL are in DEPLOY.md -->
-  <IconUrl DefaultValue="YOUR_GITHUB_PAGES_URL/icon-64.png"/>
-  <HighResolutionIconUrl DefaultValue="YOUR_GITHUB_PAGES_URL/icon-128.png"/>
-  <SupportUrl DefaultValue="YOUR_GITHUB_PAGES_URL"/>
+  <IconUrl DefaultValue="https://divergeix.github.io/outlook-simplifier//icon-64.png"/>
+  <HighResolutionIconUrl DefaultValue="https://divergeix.github.io/outlook-simplifier//icon-128.png"/>
+  <SupportUrl DefaultValue="https://divergeix.github.io/outlook-simplifier/"/>
 
   <AppDomains>
     <!-- Also allow direct Anthropic API calls from the task pane -->
@@ -39,8 +39,8 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <!-- Replace YOUR_GITHUB_PAGES_URL here too -->
-        <SourceLocation DefaultValue="YOUR_GITHUB_PAGES_URL/taskpane.html"/>
+        <!-- Replace https://divergeix.github.io/outlook-simplifier/ here too -->
+        <SourceLocation DefaultValue="https://divergeix.github.io/outlook-simplifier//taskpane.html"/>
         <RequestedHeight>450</RequestedHeight>
       </DesktopSettings>
     </Form>
@@ -100,13 +100,13 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16"  DefaultValue="YOUR_GITHUB_PAGES_URL/icon-16.png"/>
-        <bt:Image id="Icon.32x32"  DefaultValue="YOUR_GITHUB_PAGES_URL/icon-32.png"/>
-        <bt:Image id="Icon.80x80"  DefaultValue="YOUR_GITHUB_PAGES_URL/icon-80.png"/>
+        <bt:Image id="Icon.16x16"  DefaultValue="https://divergeix.github.io/outlook-simplifier//icon-16.png"/>
+        <bt:Image id="Icon.32x32"  DefaultValue="https://divergeix.github.io/outlook-simplifier//icon-32.png"/>
+        <bt:Image id="Icon.80x80"  DefaultValue="https://divergeix.github.io/outlook-simplifier//icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Commands.Url"  DefaultValue="YOUR_GITHUB_PAGES_URL/commands.html"/>
-        <bt:Url id="Taskpane.Url"  DefaultValue="YOUR_GITHUB_PAGES_URL/taskpane.html"/>
+        <bt:Url id="Commands.Url"  DefaultValue="https://divergeix.github.io/outlook-simplifier//commands.html"/>
+        <bt:Url id="Taskpane.Url"  DefaultValue="https://divergeix.github.io/outlook-simplifier//taskpane.html"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GroupLabel"              DefaultValue="Thread Simplifier"/>
