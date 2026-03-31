@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html><head><script>
+// This is a helper to generate the icon PNGs
+// Not part of the add-in itself
+function makeIcon(size, filename) {
+  var canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  var ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0078d4';
+  var r = size * 0.18;
+  ctx.beginPath();
+  ctx.moveTo(r, 0); ctx.lineTo(size-r, 0);
+  ctx.arcTo(size, 0, size, r, r);
+  ctx.lineTo(size, size-r);
+  ctx.arcTo(size, size, size-r, size, r);
+  ctx.lineTo(r, size);
+  ctx.arcTo(0, size, 0, size-r, r);
+  ctx.lineTo(0, r);
+  ctx.arcTo(0, 0, r, 0, r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold ' + (size * 0.55) + 'px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('⚡', size/2, size/2 + size*0.04);
+  return canvas.toDataURL('image/png');
+}
+</script></head>
+<body>Generate icons by running icon-gen.js in Node</body>
+</html>
