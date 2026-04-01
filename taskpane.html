@@ -305,6 +305,24 @@ body.light{
   box-shadow:0 4px 20px rgba(0,0,0,0.4)}
 
 @keyframes sweep{0%{transform:translateX(-200%)}100%{transform:translateX(400%)}}
+
+/* ── INLINE CONFIRM (replaces blocked window.confirm) ── */
+.ic-wrap{display:none;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);
+  border-radius:7px;padding:9px 11px;margin-top:4px;align-items:center;gap:8px;flex-wrap:wrap}
+.ic-wrap.show{display:flex}
+.ic-txt{font-size:11.5px;color:#f87171;flex:1;min-width:0}
+.ic-yes{padding:4px 11px;background:#ef4444;color:#fff;border:none;border-radius:5px;
+  font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+.ic-no{padding:4px 11px;background:none;border:1px solid var(--bdr2);color:var(--sub);
+  border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap}
+
+/* ── PIN BANNER ── */
+.pin-banner{background:rgba(0,120,212,0.1);border:1px solid rgba(0,120,212,0.25);
+  border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:11.5px;
+  color:var(--blue2);line-height:1.7;position:relative}
+.pin-banner b{color:var(--txt);display:block;margin-bottom:2px}
+.pin-close{position:absolute;top:8px;right:10px;background:none;border:none;
+  color:var(--dim);cursor:pointer;font-size:15px;line-height:1;padding:0}
 </style>
 </head>
 <body>
@@ -347,8 +365,17 @@ body.light{
 
 <!-- ══ PULSE ══ -->
 <div class="pane active" id="tab-pulse">
+
+  <!-- PIN BANNER -->
+  <div class="pin-banner" id="pinBanner">
+    <button class="pin-close" id="pinClose">✕</button>
+    <b>📌 Keep Simplify always visible</b>
+    Open any email → click the <b>Apps icon</b> (grid ⊞, top-right of email pane) → click <b>Thread Simplifier</b>. The pane stays open as you switch emails.
+  </div>
+
   <div id="detectBanner"></div>
   <button class="btn-primary" id="analyzeBtn">⚡ Run Full Analysis</button>
+  <button id="reReadBtn" style="width:100%;padding:9px;background:none;border:1px solid var(--bdr2);border-radius:8px;color:var(--sub);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:-4px;margin-bottom:12px">🔄 Re-read Current Email</button>
 
   <div class="sec-hd" style="margin-top:0">Quick View</div>
   <div class="qgrid">
@@ -492,6 +519,12 @@ body.light{
   <div class="hist-hdr">
     <span>Past Analyses</span>
     <button class="btn-clear" id="clearHistBtn">Clear All</button>
+  </div>
+  <!-- Clear All inline confirm -->
+  <div class="ic-wrap" id="clearConfirm" style="margin-bottom:10px">
+    <span class="ic-txt">Clear all 5 history slots?</span>
+    <button class="ic-yes" id="clearConfirmYes">Yes, clear all</button>
+    <button class="ic-no" id="clearConfirmNo">Cancel</button>
   </div>
   <div id="histList">
     <p style="color:var(--dim);text-align:center;padding:28px 0;font-size:12px">No history yet. Analyses save automatically.</p>
@@ -1459,6 +1492,12 @@ function renderHistory(){
         +'<button class="btn-retrieve" data-id="'+item.id+'">⬆ Retrieve</button>'
         +'<button class="exp-toggle" data-idx="'+i+'">▼ Details</button>'
         +'<button class="btn-del" data-id="'+item.id+'">🗑 Delete</button>'
+        +'</div>'
+        /* inline confirm — no window.confirm needed */
+        +'<div class="ic-wrap" id="ic-'+item.id+'">'  
+        +'<span class="ic-txt">Delete this entry?</span>'
+        +'<button class="ic-yes" data-id="'+item.id+'">Yes, delete</button>'
+        +'<button class="ic-no" data-id="'+item.id+'">Cancel</button>'
         +'</div>';
 
       /* Expandable detail */
@@ -1493,71 +1532,4 @@ function renderHistory(){
     list.querySelectorAll('.exp-toggle').forEach(function(btn){
       btn.addEventListener('click',function(){
         var idx=btn.getAttribute('data-idx'),det=document.getElementById('hd'+idx);
-        if(det){var open=det.style.display!=='none';det.style.display=open?'none':'block';btn.textContent=open?'▼ Details':'▲ Details';}
-      });
-    });
-
-    /* Wire retrieve buttons */
-    list.querySelectorAll('.btn-retrieve').forEach(function(btn){
-      btn.addEventListener('click',function(){
-        retrieveHistory(parseInt(btn.getAttribute('data-id')));
-      });
-    });
-
-    /* Wire individual delete buttons */
-    list.querySelectorAll('.btn-del').forEach(function(btn){
-      btn.addEventListener('click',function(){
-        if(confirm('Delete this history entry?')){
-          deleteHistory(parseInt(btn.getAttribute('data-id')));
-        }
-      });
-    });
-
-  }catch(e){
-    list.innerHTML='<p style="color:var(--dim);text-align:center;padding:28px 0;font-size:12px">Error loading history</p>';
-  }
-}
-
-ge('clearHistBtn').addEventListener('click',function(){
-  if(confirm('Clear ALL '+HIST_MAX+' history slots?')){
-    localStorage.removeItem('ots_hist');
-    renderHistory();
-    toast('History cleared','ok');
-  }
-});
-
-/* ══════════════════════════════════════════════
-   HELPERS
-══════════════════════════════════════════════ */
-function copyToClip(text,msg){
-  /* navigator.clipboard is blocked inside Office Add-in iframes.
-     Use execCommand fallback which works in all Office contexts. */
-  try{
-    var ta=document.createElement('textarea');
-    ta.value=text;
-    ta.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none';
-    document.body.appendChild(ta);
-    ta.focus(); ta.select();
-    var ok=document.execCommand('copy');
-    document.body.removeChild(ta);
-    if(ok){ toast(msg||'Copied ✓','ok'); return; }
-  }catch(e){}
-  /* Try modern API as secondary attempt */
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(function(){toast(msg||'Copied ✓','ok');}).catch(function(){toast('Copy failed — select text manually','err');});
-  } else {
-    toast('Copy failed — select text manually','err');
-  }
-}
-function ge(id){return document.getElementById(id);}
-function cap(s){return s?s[0].toUpperCase()+s.slice(1):'';}
-var toastT;
-function toast(msg,type){
-  var el=ge('toast'); el.textContent=msg; el.style.opacity='1';
-  el.style.borderColor=type==='ok'?'rgba(34,197,94,0.4)':'rgba(239,68,68,0.4)';
-  el.style.color=type==='ok'?'#22c55e':'#f87171';
-  clearTimeout(toastT); toastT=setTimeout(function(){el.style.opacity='0';},2800);
-}
-</script>
-</body>
-</html>
+        if(det){var open=det.style.display!=='none';det.style.display=open?'none':'block';btn.textCon
