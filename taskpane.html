@@ -74,7 +74,7 @@ body.light{
 .tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);
   flex-shrink:0;overflow-x:auto}
 .tab{flex-shrink:0;background:none;border:none;border-bottom:2px solid transparent;
-  color:var(--muted);cursor:pointer;padding:9px 8px;font-size:11.5px;font-weight:600;
+  color:var(--muted);cursor:pointer;padding:8px 6px;font-size:10.5px;font-weight:600;
   font-family:Arial,sans-serif;white-space:nowrap}
 .tab.active{border-bottom-color:var(--accent);color:var(--accent2)}
 
@@ -189,7 +189,7 @@ body.light{
   border-radius:4px;color:var(--text);font-size:12px;outline:none}
 .reply-loading{height:3px;background:var(--surface2);overflow:hidden;display:none;flex-shrink:0}
 .reply-loading-bar{height:100%;width:40%;background:var(--accent);animation:sweep 1.4s ease-in-out infinite}
-#replyOut{display:none;flex-direction:column;gap:8px;padding:12px;overflow-y:auto;flex:1}
+#replyOut{display:none;flex-direction:column;gap:8px;padding:12px;overflow-y:auto;flex:1;min-height:0}
 #replyTa{width:100%;padding:10px;background:var(--inputBg);border:1px solid var(--border);
   border-radius:7px;color:var(--text);font-size:12px;resize:vertical;
   font-family:Arial,sans-serif;box-sizing:border-box;outline:none;line-height:1.6;min-height:160px}
@@ -324,21 +324,6 @@ body.light{
       <button class="pill" data-s="executive">Executive</button>
       <button class="pill" data-s="bullet">Bullets</button>
     </div>
-    <div style="padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0">
-      <div class="sec-label" style="margin-top:0">Copy As</div>
-      <div class="icon-row">
-        <button class="icon-btn" id="cpWa">📱 WhatsApp</button>
-        <button class="icon-btn" id="cpEmail">📧 Email</button>
-        <button class="icon-btn" id="cpTask">✅ Task List</button>
-      </div>
-      <div class="sec-label">Export</div>
-      <div class="icon-row">
-        <button class="icon-btn" id="exText">↓ Text</button>
-        <button class="icon-btn" id="exPdf">↓ PDF</button>
-        <button class="icon-btn" id="exNotes">↓ Notes</button>
-        <button class="icon-btn" id="exTasks">↓ Tasks</button>
-      </div>
-    </div>
     <div id="intelOut" style="flex:1;overflow-y:auto;padding:12px">
       <p style="color:var(--muted);text-align:center;padding:24px 0;font-size:12px">Run analysis on Pulse tab first</p>
     </div>
@@ -361,7 +346,7 @@ body.light{
 
   <!-- ══ REPLY ══ -->
   <div class="pane" id="tab-reply" style="flex-direction:column;padding:0">
-    <div style="padding:11px 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0">
+    <div style="padding:10px 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;overflow-y:auto;max-height:55vh">
       <div class="replying-as">
         <div class="replying-lbl">Replying as</div>
         <div class="replying-name" id="senderLabel">Detecting…</div>
@@ -389,10 +374,25 @@ body.light{
     <div class="reply-loading" id="replyLoading"><div class="reply-loading-bar"></div></div>
     <div id="replyOut">
       <div id="charCount"></div>
-      <textarea id="replyTa" rows="10"></textarea>
+      <textarea id="replyTa" rows="7"></textarea>
       <div class="btn-row">
-        <button class="btn-outline" id="copyReplyBtn">Copy</button>
-        <button class="btn-outline" id="insertReplyBtn">Insert into Outlook</button>
+        <button class="btn-outline" id="copyReplyBtn">📋 Copy</button>
+        <button class="btn-outline" id="insertReplyBtn">↩ Insert into Outlook</button>
+      </div>
+      <!-- COPY AS -->
+      <div class="sec-label" style="margin-top:10px">Copy As</div>
+      <div class="icon-row">
+        <button class="icon-btn" id="cpWa">📱 WhatsApp</button>
+        <button class="icon-btn" id="cpEmail">📧 Email</button>
+        <button class="icon-btn" id="cpTask">✅ Task List</button>
+      </div>
+      <!-- EXPORT -->
+      <div class="sec-label" style="margin-top:8px">Export</div>
+      <div class="icon-row">
+        <button class="icon-btn" id="exText">↓ Text</button>
+        <button class="icon-btn" id="exPdf">↓ PDF</button>
+        <button class="icon-btn" id="exNotes">↓ Notes</button>
+        <button class="icon-btn" id="exTasks">↓ Tasks</button>
       </div>
     </div>
   </div>
