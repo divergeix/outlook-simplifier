@@ -4,7 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Thread Simplifier</title>
-<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<!-- Office.js MUST load before any script runs -->
+<script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;font-size:13px}
@@ -283,8 +284,14 @@ body.light{
 .hchip:last-child{border-right:none}
 .hchip-n{font-size:15px;font-weight:700;color:var(--txt)}
 .hchip-l{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:0.3px}
-.hcard-foot{padding:7px 12px;display:flex;align-items:center;gap:8px}
+.hcard-foot{padding:7px 12px;display:flex;align-items:center;gap:6px}
 .exp-toggle{background:none;border:none;color:var(--blue2);font-size:11px;cursor:pointer;font-family:inherit;padding:0;font-weight:600}
+.btn-retrieve{padding:5px 12px;background:var(--blue);color:#fff;border:none;
+  border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-retrieve:hover{opacity:0.85}
+.btn-del{background:none;border:1px solid rgba(239,68,68,0.3);color:#f87171;
+  padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;margin-left:auto}
+.btn-del:hover{background:rgba(239,68,68,0.1)}
 .hcard-detail{display:none;padding:0 12px 10px;border-top:1px solid var(--bdr)}
 .detail-lbl{font-size:9.5px;font-weight:700;color:var(--dim);text-transform:uppercase;margin:8px 0 4px}
 .detail-row{font-size:11.5px;color:var(--sub);margin-bottom:3px;display:flex;gap:7px}
@@ -504,16 +511,38 @@ var summaryStyle='short', currentTab='pulse', crmTag='', quickMode='all', charLi
 var outlookUser={name:'',email:''}, apiKey='';
 
 /* ══════════════════════════════════════════════
-   OFFICE INIT
+   OFFICE INIT — safe guard against CDN load delay
 ══════════════════════════════════════════════ */
-Office.onReady(function(info){
-  if(info.host===Office.HostType.Outlook){
+function initOffice(){
+  if(typeof Office==='undefined'){
+    /* Office.js CDN not loaded yet — retry in 200ms */
+    setTimeout(initOffice,200);
+    return;
+  }
+  Office.onReady(function(info){
     loadApiKey();
     loadTheme();
-    readEmail();
-    Office.context.mailbox.addHandlerAsync(Office.EventType.ItemChanged,function(){readEmail();});
-  }
-});
+    if(info.host===Office.HostType.Outlook){
+      readEmail();
+      try{
+        Office.context.mailbox.addHandlerAsync(
+          Office.EventType.ItemChanged,
+          function(){readEmail();}
+        );
+      }catch(e){}
+    } else {
+      /* Opened outside Outlook (e.g. browser preview) — show warning */
+      ge('detectBanner').innerHTML='<div class="banner-warn">⚠ Open this add-in inside Outlook Desktop or Outlook Web to use it.</div>';
+    }
+  });
+}
+
+/* Start after DOM is ready */
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',initOffice);
+}else{
+  initOffice();
+}
 
 /* ══════════════════════════════════════════════
    API KEY
@@ -560,6 +589,7 @@ function switchTab(name){
    READ EMAIL
 ══════════════════════════════════════════════ */
 function readEmail(){
+  if(typeof Office==='undefined'||!Office.context||!Office.context.mailbox){return;}
   var item=Office.context.mailbox.item;
   if(!item){updateDetect(false);return;}
   try{
@@ -568,16 +598,31 @@ function readEmail(){
     ge('uInfo').textContent=outlookUser.name||outlookUser.email||'';
     ge('senderLabel').textContent=outlookUser.name||outlookUser.email||'Unknown';
   }catch(e){}
+
   var subject='No subject';
   try{subject=item.subject||'No subject';}catch(e){}
   ge('metaBar').textContent=subject.length>55?subject.slice(0,55)+'…':subject;
-  item.body.getAsync(Office.CoercionType.Text,function(r){
-    if(r.status!==Office.AsyncResultStatus.Succeeded){updateDetect(false);return;}
-    var senderName='Unknown',senderEmail='',date='';
-    try{senderName=item.from.displayName||'Unknown';}catch(e){}
-    try{senderEmail=item.from.emailAddress||'';}catch(e){}
-    try{date=item.dateTimeCreated?new Date(item.dateTimeCreated).toLocaleString():'';}catch(e){}
-    var msgs=parseThread(r.value||'',senderName,senderEmail,date);
+
+  var senderName='Unknown',senderEmail='',date='';
+  try{senderName=item.from.displayName||'Unknown';}catch(e){}
+  try{senderEmail=item.from.emailAddress||'';}catch(e){}
+  try{date=item.dateTimeCreated?new Date(item.dateTimeCreated).toLocaleString():'';}catch(e){}
+
+  /* Use HTML body — contains ALL quoted trail mails in full,
+     including collapsed ones. Text body misses some Outlook formatting. */
+  item.body.getAsync(Office.CoercionType.Html,function(r){
+    if(r.status!==Office.AsyncResultStatus.Succeeded){
+      /* Fallback to plain text if HTML fails */
+      item.body.getAsync(Office.CoercionType.Text,function(r2){
+        if(r2.status!==Office.AsyncResultStatus.Succeeded){updateDetect(false);return;}
+        var msgs=parseThreadText(r2.value||'',senderName,senderEmail,date);
+        emailData={subject:subject,messages:msgs};
+        updateDetect(true,msgs.length);
+        renderFlow();
+      });
+      return;
+    }
+    var msgs=parseThreadHtml(r.value||'',senderName,senderEmail,date);
     emailData={subject:subject,messages:msgs};
     updateDetect(true,msgs.length);
     renderFlow();
@@ -585,28 +630,143 @@ function readEmail(){
 }
 
 /* ══════════════════════════════════════════════
-   PARSE THREAD
+   PARSE THREAD FROM HTML BODY
+   Outlook stores ALL trail mails in the HTML body
+   as nested <blockquote> or <div> sections.
+   We extract each one even if collapsed in the UI.
 ══════════════════════════════════════════════ */
-function parseThread(body,sName,sEmail,date){
-  var chunks=[body];
-  var seps=[/^-{3,}\s*Original Message\s*-{3,}\s*$/im,/^-{3,}\s*Forwarded Message\s*-{3,}\s*$/im,/^On .{10,80} wrote:\s*$/im];
-  for(var s=0;s<seps.length;s++){
-    var nc=[];
-    for(var c=0;c<chunks.length;c++){var p=chunks[c].split(seps[s]);for(var i=0;i<p.length;i++)nc.push(p[i]);}
-    if(nc.length>chunks.length){chunks=nc;break;}
+function parseThreadHtml(html,sName,sEmail,date){
+  /* Strip scripts/styles */
+  html=html.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<style[\s\S]*?<\/style>/gi,'');
+
+  /* Outlook wraps each quoted email in one of these patterns:
+     1. <div style="border..."> (Outlook desktop)
+     2. <blockquote> (standard)
+     3. <div class="OutlookMessageHeader"> or similar
+     We split on the boundary markers */
+
+  var msgs=[], seen={};
+
+  /* Strategy 1: Split on Outlook's hr/div separators in HTML */
+  var sections=[];
+
+  /* Split on <hr> or <div> boundary that Outlook inserts between quoted emails */
+  var splitHtml=html
+    .replace(/<hr[^>]*>/gi,'|||SPLIT|||')
+    .replace(/<div[^>]*class=["'][^"']*(?:OutlookMessageHeader|MsoNormal|gmail_quote|x_gmail_quote)[^"']*["'][^>]*>/gi,'|||SPLIT|||');
+
+  var parts=splitHtml.split('|||SPLIT|||');
+
+  for(var i=0;i<parts.length;i++){
+    var txt=htmlToText(parts[i]);
+    if(!txt||txt.trim().length<10) continue;
+    sections.push(txt.trim());
   }
+
+  /* Strategy 2: If only 1 section found, try text-based split on the HTML-converted text */
+  if(sections.length<=1){
+    var fullText=htmlToText(html);
+    return parseThreadText(fullText,sName,sEmail,date);
+  }
+
+  /* Process each section */
+  for(var i=0;i<sections.length;i++){
+    var chunk=sections[i];
+    var sender=i===0?sName:'Unknown', email=i===0?sEmail:'', d=i===0?date:'';
+
+    /* Try to extract From/Sent/Date header */
+    var fm=chunk.match(/From\s*:\s*([^\n<]+?)(?:\s*[<\[]([\w._%+\-]+@[\w.\-]+)[>\]])?\s*\n/i);
+    var sm=chunk.match(/(?:Sent|Date)\s*:\s*([^\n]+)\n/i);
+    if(fm&&i>0){
+      sender=(fm[1]||'').trim().replace(/[<>]/g,'')||sender;
+      email=fm[2]?fm[2].trim():email;
+    }
+    if(sm&&i>0) d=(sm[1]||'').trim();
+
+    /* Remove header lines from body */
+    var body=chunk
+      .replace(/From\s*:[^\n]*\n/gi,'')
+      .replace(/(?:Sent|Date)\s*:[^\n]*\n/gi,'')
+      .replace(/To\s*:[^\n]*\n/gi,'')
+      .replace(/Cc\s*:[^\n]*\n/gi,'')
+      .replace(/Subject\s*:[^\n]*\n/gi,'')
+      .replace(/^>.*$/gm,'')
+      .trim();
+
+    body=cleanBody(body);
+    if(!body||body.length<5) continue;
+    var key=body.slice(0,50); if(seen[key]) continue; seen[key]=true;
+    msgs.push({sender:sender,email:email,date:d,body:body});
+  }
+
+  if(!msgs.length){
+    var fullText=htmlToText(html);
+    return parseThreadText(fullText,sName,sEmail,date);
+  }
+  return msgs;
+}
+
+/* Convert HTML to plain text */
+function htmlToText(html){
+  /* Replace block elements with newlines */
+  html=html
+    .replace(/<br\s*\/?>/gi,'\n')
+    .replace(/<\/p>/gi,'\n')
+    .replace(/<\/div>/gi,'\n')
+    .replace(/<\/tr>/gi,'\n')
+    .replace(/<\/li>/gi,'\n')
+    .replace(/<li[^>]*>/gi,'• ')
+    .replace(/<[^>]+>/g,'')           /* strip all remaining tags */
+    .replace(/&nbsp;/g,' ')
+    .replace(/&amp;/g,'&')
+    .replace(/&lt;/g,'<')
+    .replace(/&gt;/g,'>')
+    .replace(/&quot;/g,'"')
+    .replace(/&#39;/g,"'")
+    .replace(/&[a-z]+;/gi,' ');
+  /* Collapse excess whitespace */
+  return html.replace(/\n{4,}/g,'\n\n').replace(/ {3,}/g,' ').trim();
+}
+
+/* ══════════════════════════════════════════════
+   PARSE THREAD FROM PLAIN TEXT (fallback)
+   Handles all common Outlook quoted formats
+══════════════════════════════════════════════ */
+function parseThreadText(body,sName,sEmail,date){
+  /* Apply ALL separators, not just the first match */
+  var allSeps=[
+    /^[-_]{3,}\s*Original Message\s*[-_]{3,}\s*$/im,
+    /^[-_]{3,}\s*Forwarded Message\s*[-_]{3,}\s*$/im,
+    /^[-_]{3,}\s*Reply Message\s*[-_]{3,}\s*$/im,
+    /^On .{5,120} wrote:\s*$/im,
+    /^On .{5,120}\n.{0,80} wrote:\s*$/im,
+    /^From:\s*.+\nSent:\s*.+\nTo:/im,
+    /^From:\s*.+\nDate:\s*.+\nTo:/im,
+    /^_{10,}\s*$/m,
+    /^-{10,}\s*$/m,
+  ];
+
+  /* Insert a unique marker at each split point */
+  var marked=body;
+  for(var s=0;s<allSeps.length;s++){
+    marked=marked.replace(allSeps[s],'|||SPLIT|||');
+  }
+  var chunks=marked.split('|||SPLIT|||');
+
   var msgs=[],seen={};
   for(var i=0;i<chunks.length;i++){
     var chunk=chunks[i].trim(); if(!chunk||chunk.length<10) continue;
     var sender=i===0?sName:'Unknown',email=i===0?sEmail:'',d=i===0?date:'';
-    var fm=chunk.match(/^From\s*:\s*(.+?)(?:\s*<([^>]+)>)?\s*\n/im);
-    var sm=chunk.match(/^(?:Sent|Date)\s*:\s*(.+?)\s*\n/im);
+
+    var fm=chunk.match(/^From\s*:\s*([^\n<]+?)(?:\s*[<\[]([\w._%+\-]+@[\w.\-]+)[>\]])?\s*\n/im);
+    var sm=chunk.match(/^(?:Sent|Date)\s*:\s*([^\n]+)\n/im);
     if(fm&&i>0){
-      sender=fm[1].trim().replace(/<[^>]+>/,'').trim()||sender;
-      email=fm[2]?fm[2].trim():'';
-      chunk=chunk.replace(/^From\s*:.*\n/im,'').replace(/^Sent\s*:.*\n/im,'').replace(/^Date\s*:.*\n/im,'').replace(/^To\s*:.*\n/im,'').replace(/^Cc\s*:.*\n/im,'').replace(/^Subject\s*:.*\n/im,'').trim();
+      sender=(fm[1]||'').trim().replace(/[<>]/g,'')||sender;
+      email=fm[2]?fm[2].trim():email;
+      chunk=chunk.replace(/^From\s*:[^\n]*\n/im,'').replace(/^Sent\s*:[^\n]*\n/im,'').replace(/^Date\s*:[^\n]*\n/im,'').replace(/^To\s*:[^\n]*\n/im,'').replace(/^Cc\s*:[^\n]*\n/im,'').replace(/^Subject\s*:[^\n]*\n/im,'').trim();
     }
-    if(sm&&i>0) d=sm[1].trim();
+    if(sm&&i>0) d=(sm[1]||'').trim();
+
     var b=cleanBody(chunk.replace(/^>.*$/gm,'').replace(/\n{3,}/g,'\n\n').trim());
     if(!b||b.length<5) continue;
     var key=b.slice(0,50); if(seen[key]) continue; seen[key]=true;
@@ -984,8 +1144,12 @@ ge('copyReplyBtn').addEventListener('click',function(){
 ge('insertReplyBtn').addEventListener('click',function(){
   var v=ge('replyTa').value; if(!v){toast('Generate a reply first','err');return;}
   try{
-    Office.context.mailbox.item.displayReplyForm({htmlBody:v.replace(/\n/g,'<br>'),attachments:[]});
-    toast('Reply form opened ✓','ok');
+    if(typeof Office!=='undefined'&&Office.context&&Office.context.mailbox&&Office.context.mailbox.item){
+      Office.context.mailbox.item.displayReplyForm({htmlBody:v.replace(/\n/g,'<br>'),attachments:[]});
+      toast('Reply form opened ✓','ok');
+    } else {
+      copyToClip(v,'Copied ✓ — paste into reply box');
+    }
   }catch(e){copyToClip(v,'Copied ✓ — paste into reply box');}
 });
 
@@ -1124,43 +1288,243 @@ function addTyping(){
 function removeTyping(tid){var el=document.getElementById(tid);if(el)el.remove();}
 
 /* ══════════════════════════════════════════════
-   HISTORY
+   HISTORY  (max 5 entries)
 ══════════════════════════════════════════════ */
+var HIST_MAX = 5;
+
 function saveHistory(){
   if(!analysis||!emailData) return;
   var d=analysis;
-  var item={id:Date.now(),savedAt:new Date().toISOString(),subject:emailData.subject||'No subject',msgCount:emailData.messages.length,summary:d.summary_short||'',decisions:d.decisions||[],tasks:d.tasks||[],deadlines:d.deadlines||[],commitments:d.commitments||[],questions:d.unanswered_questions||[],priority:d.priority||'medium',sentiment:d.sentiment||'neutral',status:d.thread_status||'ongoing',participants:d.participants||[],crmTag:crmTag||''};
-  try{var h=JSON.parse(localStorage.getItem('ots_hist')||'[]');h=h.filter(function(x){return x.subject!==item.subject;});h.unshift(item);if(h.length>100)h=h.slice(0,100);localStorage.setItem('ots_hist',JSON.stringify(h));}catch(e){}
+  var item={
+    id:Date.now(),
+    savedAt:new Date().toISOString(),
+    subject:emailData.subject||'No subject',
+    msgCount:emailData.messages.length,
+    summary:d.summary_short||'',
+    summary_detailed:d.summary_detailed||'',
+    summary_executive:d.summary_executive||'',
+    summary_bullet:d.summary_bullet||[],
+    decisions:d.decisions||[],
+    tasks:d.tasks||[],
+    deadlines:d.deadlines||[],
+    commitments:d.commitments||[],
+    questions:d.unanswered_questions||[],
+    risk_alerts:d.risk_alerts||[],
+    participants:d.participants||[],
+    topics:d.topics||[],
+    intent:d.intent||[],
+    meeting:d.meeting||{detected:false},
+    priority:d.priority||'medium',
+    priority_reason:d.priority_reason||'',
+    sentiment:d.sentiment||'neutral',
+    status:d.thread_status||'ongoing',
+    follow_up_needed:d.follow_up_needed||false,
+    follow_up_detail:d.follow_up_detail||'',
+    crmTag:crmTag||''
+  };
+  try{
+    var h=JSON.parse(localStorage.getItem('ots_hist')||'[]');
+    /* Remove duplicate same subject */
+    h=h.filter(function(x){return x.subject!==item.subject;});
+    h.unshift(item);
+    /* Cap at HIST_MAX */
+    if(h.length>HIST_MAX) h=h.slice(0,HIST_MAX);
+    localStorage.setItem('ots_hist',JSON.stringify(h));
+  }catch(e){}
 }
+
+function deleteHistory(id){
+  try{
+    var h=JSON.parse(localStorage.getItem('ots_hist')||'[]');
+    h=h.filter(function(x){return x.id!==id;});
+    localStorage.setItem('ots_hist',JSON.stringify(h));
+    renderHistory();
+    toast('Entry deleted','ok');
+  }catch(e){}
+}
+
+function retrieveHistory(id){
+  try{
+    var h=JSON.parse(localStorage.getItem('ots_hist')||'[]');
+    var item=null;
+    for(var i=0;i<h.length;i++){if(h[i].id===id){item=h[i];break;}}
+    if(!item){toast('Entry not found','err');return;}
+
+    /* Restore analysis object from saved data */
+    analysis={
+      summary_short:item.summary||'',
+      summary_detailed:item.summary_detailed||'',
+      summary_executive:item.summary_executive||'',
+      summary_bullet:item.summary_bullet||[],
+      decisions:item.decisions||[],
+      tasks:item.tasks||[],
+      deadlines:item.deadlines||[],
+      unanswered_questions:item.questions||[],
+      commitments:item.commitments||[],
+      risk_alerts:item.risk_alerts||[],
+      participants:item.participants||[],
+      topics:item.topics||[],
+      intent:item.intent||[],
+      meeting:item.meeting||{detected:false},
+      priority:item.priority||'medium',
+      priority_reason:item.priority_reason||'',
+      sentiment:item.sentiment||'neutral',
+      thread_status:item.status||'ongoing',
+      follow_up_needed:item.follow_up_needed||false,
+      follow_up_detail:item.follow_up_detail||''
+    };
+
+    /* Restore CRM tag */
+    crmTag=item.crmTag||'';
+    document.querySelectorAll('.crm-btn').forEach(function(b){
+      var t=b.getAttribute('data-tag'),col=CRM_COLORS[t]||'';
+      var active=crmTag&&crmTag===t&&col;
+      b.style.background=active?col+'18':'';
+      b.style.borderColor=active?col+'55':'';
+      b.style.color=active?col:'';
+    });
+
+    /* Restore minimal emailData so threadToText works */
+    if(!emailData||emailData.subject!==item.subject){
+      emailData={subject:item.subject,messages:[{sender:'(Retrieved)',email:'',date:item.savedAt,body:'(Full email body not stored — analysis retrieved from history)'}]};
+    }
+
+    /* Render all tabs */
+    renderPulse(); renderIntel(); renderFlow(); renderOrbit();
+
+    /* Update meta bar */
+    ge('metaBar').textContent=item.subject.length>55?item.subject.slice(0,55)+'…':item.subject;
+    ge('detectBanner').innerHTML='<div class="banner-ok"><span>📂</span> Retrieved from history: '+new Date(item.savedAt).toLocaleDateString()+'</div>';
+
+    /* Switch to Pulse tab to show results */
+    switchTab('pulse');
+    toast('Analysis retrieved ✓','ok');
+  }catch(e){toast('Retrieve failed: '+e.message,'err');}
+}
+
 function renderHistory(){
   var list=ge('histList'); if(!list) return;
   try{
     var hist=JSON.parse(localStorage.getItem('ots_hist')||'[]');
-    if(!hist.length){list.innerHTML='<p style="color:var(--dim);text-align:center;padding:28px 0;font-size:12px">No history yet. Analyses save automatically.</p>';return;}
-    var h='',PC={high:'#ef4444',medium:'#f59e0b',low:'#22c55e'},ST={ongoing:'● Ongoing',resolved:'✓ Resolved',awaiting_reply:'◷ Awaiting Reply'};
+    if(!hist.length){
+      list.innerHTML='<p style="color:var(--dim);text-align:center;padding:28px 0;font-size:12px">No history yet.<br>Up to '+HIST_MAX+' analyses are saved automatically.</p>';
+      return;
+    }
+    var h='';
+
+    /* Slot indicator */
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+      +'<span style="font-size:11px;color:var(--dim)">'+hist.length+' / '+HIST_MAX+' slots used</span>'
+      +'<div style="display:flex;gap:4px">';
+    for(var s=0;s<HIST_MAX;s++){
+      h+='<div style="width:28px;height:5px;border-radius:3px;background:'+(s<hist.length?'var(--blue)':'var(--surf2)')+'"></div>';
+    }
+    h+='</div></div>';
+
+    var PC={high:'#ef4444',medium:'#f59e0b',low:'#22c55e'};
+    var ST={ongoing:'● Ongoing',resolved:'✓ Resolved',awaiting_reply:'◷ Awaiting Reply'};
+
     hist.forEach(function(item,i){
-      var date=new Date(item.savedAt).toLocaleDateString(),pc=PC[item.priority]||'#94a3b8';
-      h+='<div class="hcard"><div class="hcard-top"><div style="flex:1;min-width:0"><div class="hcard-subj">'+item.subject+'</div><div class="hcard-date">'+date+' · '+item.msgCount+' email(s)</div></div><div class="hcard-badges"><span class="badge" style="background:'+pc+'18;color:'+pc+';border-color:'+pc+'40">'+item.priority.toUpperCase()+'</span><span style="font-size:9.5px;color:var(--dim)">'+(ST[item.status]||item.status)+'</span>'+(item.crmTag?'<span style="font-size:9.5px;font-weight:700;color:'+(CRM_COLORS[item.crmTag]||'var(--dim)')+'">'+cap(item.crmTag)+'</span>':'')+'</div></div>';
+      var date=new Date(item.savedAt).toLocaleDateString();
+      var time=new Date(item.savedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+      var pc=PC[item.priority]||'#94a3b8';
+
+      h+='<div class="hcard">';
+
+      /* Card header */
+      h+='<div class="hcard-top">'
+        +'<div style="flex:1;min-width:0">'
+        +'<div class="hcard-subj">'+item.subject+'</div>'
+        +'<div class="hcard-date">'+date+' '+time+' · '+item.msgCount+' email(s)</div>'
+        +'</div>'
+        +'<div class="hcard-badges">'
+        +'<span class="badge" style="background:'+pc+'18;color:'+pc+';border-color:'+pc+'40">'+item.priority.toUpperCase()+'</span>'
+        +'<span style="font-size:9.5px;color:var(--dim)">'+(ST[item.status]||item.status)+'</span>'
+        +(item.crmTag?'<span style="font-size:9.5px;font-weight:700;color:'+(CRM_COLORS[item.crmTag]||'var(--dim)')+'">'+cap(item.crmTag)+'</span>':'')
+        +'</div></div>';
+
+      /* Summary */
       if(item.summary) h+='<div class="hcard-sum">'+item.summary+'</div>';
-      h+='<div class="hcard-chips"><div class="hchip"><div class="hchip-n">'+item.decisions.length+'</div><div class="hchip-l">Decisions</div></div><div class="hchip"><div class="hchip-n">'+item.tasks.length+'</div><div class="hchip-l">Tasks</div></div><div class="hchip"><div class="hchip-n">'+item.deadlines.length+'</div><div class="hchip-l">Deadlines</div></div><div class="hchip"><div class="hchip-n">'+((item.commitments||[]).length)+'</div><div class="hchip-l">Commits</div></div></div>';
-      h+='<div class="hcard-foot"><button class="exp-toggle" data-idx="'+i+'">▼ Show details</button></div>';
+
+      /* Count chips */
+      h+='<div class="hcard-chips">'
+        +'<div class="hchip"><div class="hchip-n">'+item.decisions.length+'</div><div class="hchip-l">Decisions</div></div>'
+        +'<div class="hchip"><div class="hchip-n">'+item.tasks.length+'</div><div class="hchip-l">Tasks</div></div>'
+        +'<div class="hchip"><div class="hchip-n">'+item.deadlines.length+'</div><div class="hchip-l">Deadlines</div></div>'
+        +'<div class="hchip"><div class="hchip-n">'+((item.commitments||[]).length)+'</div><div class="hchip-l">Commits</div></div>'
+        +'</div>';
+
+      /* Footer — Retrieve + Expand + Delete */
+      h+='<div class="hcard-foot">'
+        +'<button class="btn-retrieve" data-id="'+item.id+'">⬆ Retrieve</button>'
+        +'<button class="exp-toggle" data-idx="'+i+'">▼ Details</button>'
+        +'<button class="btn-del" data-id="'+item.id+'">🗑 Delete</button>'
+        +'</div>';
+
+      /* Expandable detail */
       h+='<div class="hcard-detail" id="hd'+i+'">';
-      if(item.decisions&&item.decisions.length){h+='<div class="detail-lbl">Decisions</div>';item.decisions.forEach(function(x){h+='<div class="detail-row"><span style="color:var(--green)">✓</span><span>'+x+'</span></div>';});}
-      if(item.tasks&&item.tasks.length){h+='<div class="detail-lbl">Tasks</div>';item.tasks.forEach(function(t){var td=typeof t==='string'?t:t.description;h+='<div class="detail-row"><span style="color:var(--blue2)">□</span><span>'+td+'</span></div>';});}
-      if(item.commitments&&item.commitments.length){h+='<div class="detail-lbl">Commitments</div>';item.commitments.forEach(function(x){h+='<div class="detail-row"><span>🤝</span><span>'+x+'</span></div>';});}
-      if(item.participants&&item.participants.length){h+='<div class="detail-lbl">People</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">';item.participants.forEach(function(p){var pn=typeof p==='string'?p:(p.name||'');h+='<span style="background:var(--surf2);border:1px solid var(--bdr);border-radius:20px;color:var(--sub);font-size:11px;padding:2px 9px">'+pn+'</span>';});h+='</div>';}
-      h+='</div></div>';
+      if(item.decisions&&item.decisions.length){
+        h+='<div class="detail-lbl">Decisions</div>';
+        item.decisions.forEach(function(x){h+='<div class="detail-row"><span style="color:var(--green)">✓</span><span>'+x+'</span></div>';});
+      }
+      if(item.tasks&&item.tasks.length){
+        h+='<div class="detail-lbl">Tasks</div>';
+        item.tasks.forEach(function(t){var td=typeof t==='string'?t:t.description;h+='<div class="detail-row"><span style="color:var(--blue2)">□</span><span>'+td+'</span></div>';});
+      }
+      if(item.commitments&&item.commitments.length){
+        h+='<div class="detail-lbl">Commitments</div>';
+        item.commitments.forEach(function(x){h+='<div class="detail-row"><span>🤝</span><span>'+x+'</span></div>';});
+      }
+      if(item.questions&&item.questions.length){
+        h+='<div class="detail-lbl">Unanswered Questions</div>';
+        item.questions.forEach(function(x){h+='<div class="detail-row"><span style="color:var(--amber)">?</span><span>'+x+'</span></div>';});
+      }
+      if(item.participants&&item.participants.length){
+        h+='<div class="detail-lbl">People</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">';
+        item.participants.forEach(function(p){var pn=typeof p==='string'?p:(p.name||'');h+='<span style="background:var(--surf2);border:1px solid var(--bdr);border-radius:20px;color:var(--sub);font-size:11px;padding:2px 9px">'+pn+'</span>';});
+        h+='</div>';
+      }
+      h+='</div></div>'; /* close hcard-detail + hcard */
     });
+
     list.innerHTML=h;
+
+    /* Wire expand toggles */
     list.querySelectorAll('.exp-toggle').forEach(function(btn){
       btn.addEventListener('click',function(){
         var idx=btn.getAttribute('data-idx'),det=document.getElementById('hd'+idx);
-        if(det){var open=det.style.display!=='none';det.style.display=open?'none':'block';btn.textContent=open?'▼ Show details':'▲ Hide details';}
+        if(det){var open=det.style.display!=='none';det.style.display=open?'none':'block';btn.textContent=open?'▼ Details':'▲ Details';}
       });
     });
-  }catch(e){list.innerHTML='<p style="color:var(--dim);text-align:center;padding:28px 0;font-size:12px">Error loading history</p>';}
+
+    /* Wire retrieve buttons */
+    list.querySelectorAll('.btn-retrieve').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        retrieveHistory(parseInt(btn.getAttribute('data-id')));
+      });
+    });
+
+    /* Wire individual delete buttons */
+    list.querySelectorAll('.btn-del').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        if(confirm('Delete this history entry?')){
+          deleteHistory(parseInt(btn.getAttribute('data-id')));
+        }
+      });
+    });
+
+  }catch(e){
+    list.innerHTML='<p style="color:var(--dim);text-align:center;padding:28px 0;font-size:12px">Error loading history</p>';
+  }
 }
-ge('clearHistBtn').addEventListener('click',function(){if(confirm('Clear all history?')){localStorage.removeItem('ots_hist');renderHistory();toast('History cleared','ok');}});
+
+ge('clearHistBtn').addEventListener('click',function(){
+  if(confirm('Clear ALL '+HIST_MAX+' history slots?')){
+    localStorage.removeItem('ots_hist');
+    renderHistory();
+    toast('History cleared','ok');
+  }
+});
 
 /* ══════════════════════════════════════════════
    HELPERS
