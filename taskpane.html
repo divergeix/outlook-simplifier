@@ -996,37 +996,25 @@ ge('cpWa').addEventListener('click',function(){doCopy('whatsapp');});
 ge('cpEmail').addEventListener('click',function(){doCopy('email');});
 ge('cpTask').addEventListener('click',function(){doCopy('tasklist');});
 
-function buildCopyText(fmt){
-  if(!analysis) return null;
-  var d=analysis, subj=emailData?emailData.subject:'—';
-  if(fmt==='whatsapp'){
-    var l=[]; l.push('*'+subj+'*'); l.push('');
-    if(d.summary_short){l.push(d.summary_short);l.push('');}
-    if(d.decisions&&d.decisions.length){l.push('*✅ Decisions*');d.decisions.forEach(function(x){l.push('• '+x);});l.push('');}
-    if(d.tasks&&d.tasks.length){l.push('*📌 Actions*');d.tasks.forEach(function(t){var desc=typeof t==='string'?t:t.description;l.push('□ '+desc+(t&&t.assignee?' — '+t.assignee:''));});l.push('');}
-    if(d.deadlines&&d.deadlines.length){l.push('*⏰ Deadlines*');d.deadlines.forEach(function(dl){var item=typeof dl==='string'?dl:dl.item,date=typeof dl==='object'?(dl.date||'TBD'):'TBD';l.push(date+' — '+item);});}
-    return l.join('\n');
-  }
-  if(fmt==='email'){
-    var l=[]; l.push('Subject: Re: '+subj); l.push(''); l.push('Hi,'); l.push(''); l.push("Here's a quick summary:"); l.push('');
-    if(d.summary_short){l.push(d.summary_short);l.push('');}
-    if(d.decisions&&d.decisions.length){l.push('Key Decisions:');d.decisions.forEach(function(x){l.push('  • '+x);});l.push('');}
-    if(d.tasks&&d.tasks.length){l.push('Action Items:');d.tasks.forEach(function(t){var desc=typeof t==='string'?t:t.description;l.push('  □ '+desc+(t&&t.assignee?' | Owner: '+t.assignee:'')+(t&&t.due_date?' | Due: '+t.due_date:''));});l.push('');}
-    l.push('Thanks,'); return l.join('\n');
-  }
-  if(fmt==='tasklist'){
-    var l=[]; l.push('TASK LIST — '+subj); l.push(new Date().toLocaleDateString()); l.push('─────────────────────────');
-    if(d.tasks&&d.tasks.length){d.tasks.forEach(function(t){var desc=typeof t==='string'?t:t.description;l.push('□ '+desc+(t&&t.assignee?'\n   Owner: '+t.assignee:'')+(t&&t.due_date?'\n   Due: '+t.due_date:'')+(t&&t.priority?'\n   Priority: '+t.priority:''));l.push('');});}
-    else l.push('No action items detected.');
-    if(d.deadlines&&d.deadlines.length){l.push('─────────────────────────');l.push('DEADLINES');d.deadlines.forEach(function(dl){var item=typeof dl==='string'?dl:dl.item,date=typeof dl==='object'?(dl.date||'TBD'):'TBD';l.push('⏰ '+date+' — '+item);});}
-    return l.join('\n');
-  }
-  return null;
-}
 function doCopy(fmt){
-  if(!analysis){toast('Run analysis first','err');return;}
-  var txt=buildCopyText(fmt); if(!txt){toast('Nothing to copy','err');return;}
-  copyToClip(txt,{whatsapp:'WhatsApp text copied ✓',email:'Email draft copied ✓',tasklist:'Task list copied ✓'}[fmt]);
+  var reply=ge('replyTa')?ge('replyTa').value.trim():'';
+  if(!reply){toast('Generate a reply first','err');return;}
+  var subj=emailData?emailData.subject:'';
+  var text='';
+  if(fmt==='whatsapp'){
+    /* Plain text, no markdown — paste directly into WhatsApp */
+    text=reply;
+  } else if(fmt==='email'){
+    /* Ready-to-paste email with subject line */
+    text=(subj?'Subject: Re: '+subj+'\n\n':'')+reply;
+  } else if(fmt==='tasklist'){
+    /* Reply wrapped with a simple header */
+    text='DRAFT REPLY'+(subj?' — '+subj:'')+'\n'
+      +new Date().toLocaleDateString()+'\n'
+      +'─────────────────────────\n\n'
+      +reply;
+  }
+  copyToClip(text,{whatsapp:'Copied for WhatsApp ✓',email:'Email draft copied ✓',tasklist:'Reply copied ✓'}[fmt]);
 }
 
 /* ══════════════════════════════════════════════
