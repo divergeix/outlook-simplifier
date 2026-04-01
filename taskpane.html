@@ -1177,7 +1177,26 @@ ge('clearHistBtn').addEventListener('click',function(){if(confirm('Clear all his
 /* ══════════════════════════════════════════════
    HELPERS
 ══════════════════════════════════════════════ */
-function copyToClip(text,msg){navigator.clipboard.writeText(text).then(function(){toast(msg||'Copied ✓','ok');}).catch(function(){toast('Clipboard error','err');});}
+function copyToClip(text,msg){
+  /* navigator.clipboard is blocked inside Office Add-in iframes.
+     Use execCommand fallback which works in all Office contexts. */
+  try{
+    var ta=document.createElement('textarea');
+    ta.value=text;
+    ta.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    var ok=document.execCommand('copy');
+    document.body.removeChild(ta);
+    if(ok){ toast(msg||'Copied ✓','ok'); return; }
+  }catch(e){}
+  /* Try modern API as secondary attempt */
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){toast(msg||'Copied ✓','ok');}).catch(function(){toast('Copy failed — select text manually','err');});
+  } else {
+    toast('Copy failed — select text manually','err');
+  }
+}
 function ge(id){return document.getElementById(id);}
 function cap(s){return s?s[0].toUpperCase()+s.slice(1):'';}
 var toastT;
