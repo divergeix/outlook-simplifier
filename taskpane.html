@@ -317,9 +317,9 @@ body.light{
   border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap}
 
 /* ── PIN BANNER ── */
-.pin-banner{background:rgba(0,120,212,0.1);border:1px solid rgba(0,120,212,0.25);
+.pin-banner{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);
   border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:11.5px;
-  color:var(--blue2);line-height:1.7;position:relative}
+  color:var(--amber);line-height:1.7;position:relative}
 .pin-banner b{color:var(--txt);display:block;margin-bottom:2px}
 .pin-close{position:absolute;top:8px;right:10px;background:none;border:none;
   color:var(--dim);cursor:pointer;font-size:15px;line-height:1;padding:0}
@@ -369,10 +369,8 @@ body.light{
   <!-- PIN BANNER -->
   <div class="pin-banner" id="pinBanner">
     <button class="pin-close" id="pinClose">✕</button>
-    <b>📌 One-time setup to make it auto-open</b>
-    1. Click <b>Apps icon</b> (⊞ grid, top-right of email) → <b>Thread Simplifier</b><br/>
-    2. Look for a <b>📌 pin icon</b> in the pane header — click it<br/>
-    After pinning, the pane opens automatically every time you open an email.
+    <b>💡 Open once per session — stays open automatically</b>
+    Click the <b>Apps icon</b> (⊞) in any email → <b>Thread Simplifier</b> to open this pane. Once open, it <b>auto-reads every email</b> as you switch — no need to click again until you restart Outlook.
   </div>
 
   <div id="detectBanner"></div>
@@ -558,15 +556,6 @@ function initOffice(){
     loadApiKey();
     loadTheme();
     if(info.host===Office.HostType.Outlook){
-
-      /* ── AUTO-OPEN: ask Outlook to load this pane automatically
-         on every email open, no manual click needed ── */
-      try{
-        if(Office.addin && Office.addin.setStartupBehavior){
-          Office.addin.setStartupBehavior(Office.StartupBehavior.load)
-            .catch(function(){/* not supported on this platform */});
-        }
-      }catch(e){}
 
       readEmail();
       try{
